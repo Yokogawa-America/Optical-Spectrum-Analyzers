@@ -1,0 +1,56 @@
+"""
+Yokogawa AQ637X OSA sample program (SOCKET)
+"""
+import socket
+import time
+
+def OpenTCPsocket(TCP_IP, TCP_PORT, BUFFER_SIZE):
+    print(TCP_IP, TCP_PORT, BUFFER_SIZE)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect((TCP_IP, TCP_PORT))
+    except Exception:
+        print('socket open error.', s.error)
+
+    print('open: complete\n')
+    return s
+
+def CloseTCPSocket(s):
+    s.close()
+
+def Read_OSA(s, BUFFER_SIZE):
+    data = s.recv(BUFFER_SIZE)
+    print('read: ', len(data), ', data: ', data)
+    return data.decode('ascii')
+
+def Write_OSA(s, MESSAGE, BUFFER_SIZE):
+    N = s.send(MESSAGE.encode())
+    print('send:', N, ', data: ', MESSAGE.encode())
+    return N
+
+if '__main__' == __name__: # execute only if run as a script
+    TCP_IP_yokogawa = '192.168.1.105'
+    TCP_PORT = 10001
+    BUFFER_SIZE = 200
+
+    # open OSA
+    s = OpenTCPsocket(TCP_IP_yokogawa, TCP_PORT, BUFFER_SIZE)
+
+    # send command for opening OSA and receive response message
+    OpeningYokogawa_str = "OPEN \"anonymous\"\r\n"
+    Write_OSA(s, OpeningYokogawa_str, BUFFER_SIZE)
+    Read_OSA(s, BUFFER_SIZE)
+
+    # send password and receive response message
+    Password_str = "\r\n"
+    Write_OSA(s, Password_str, BUFFER_SIZE)
+    Read_OSA(s, BUFFER_SIZE)
+    print('Connected\n')
+
+    # communication test
+    Write_OSA(s, "*IDN?\r\n", BUFFER_SIZE)
+    Read_OSA(s, BUFFER_SIZE)
+
+    # close OSA
+    CloseTCPSocket(s)
+    print('Closed')
