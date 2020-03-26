@@ -1,0 +1,81 @@
+Private Sub AQ637XTEST()
+Dim intData As Integer
+Dim dblMeanWL As Double
+Dim dblSpecWd As Double
+Dim strData As String
+' === Connect ===
+Winsock1.RemoteHost = "192.168.1.100" ' OSA IP address
+Winsock1.RemotePort = 10001 ' OSA remote port num
+Winsock1.Connect
+' === Wait to connect complete ===
+While (Winsock1.State <> sckConnected)
+DoEvents
+Wend
+' === Authentication by OPEN Command ===
+SendLan "open ""anonymous"""
+ReceiveLan strData
+SendLan " "
+ReceiveLan strData
+If (Left(strData, 5) <> "ready") Then
+MsgBox "User authentication error."
+Exit Sub
+End If
+' === Set the measurement parameter ===
+SendLan "*RST" ' Setting initialize
+SendLan "CFORM1" ' Command mode set
+(AQ637X mode)
+SendLan ":sens:wav:cent 1550nm" ' sweep center wl
+SendLan ":sens:wav:span 10nm" ' sweep span
+SendLan ":sens:sens mid" ' sens mode = MID
+SendLan ":sens:sweep:points:auto on" ' Sampling Point = AUTO
+' === Sweep execute ===
+SendLan ":init:smode 1" ' single sweep mode
+SendLan "*CLS" ' status clear
+SendLan ":init" ' sweep start
+' === Wait for sweep complete ===
+Do
+SendLan ":stat:oper:even?" ' get Operation Event
+Register
+ReceiveLan strData
+intData = Val(strData)
+Loop While ((intData And 1) <> 1) ' Bit0: Sweep status
+' === Analysis ===
+SendLan ":calc:category swth" ' Spectrum width
+analysis(THRESH type)
+SendLan ":calc" ' Analysis Execute
+SendLan ":calc:data?" ' get data
+ReceiveLan strData
+' === Capture analytical results ===
+dblMeanWL = Val(Left(strData, 16)) ' get mean wavelegnth
+dblSpecWd = Val(Mid(strData, 18, 16)) ' get spectrum width
+' === Output the result to the screen ===
+MsgBox ("MEAN WL: " & dblMeanWL * 1000000000# & " nm" & vbCrLf & _
+"SPEC WD: " & dblSpecWd * 1000000000# & " nm")
+' === Disconnect ===
+Winsock1.Close
+'Wait to disconnect complete
+While (Winsock1.State <> sckClosed)
+DoEvents
+Wend
+End Sub
+'==================================================
+' Sub routine
+' Send Remote Command
+'==================================================
+Sub SendLan(strData As String)
+Winsock1.SendData strData & vbCrLf
+DoEvents
+End Sub
+'==================================================
+' Sub routine
+' Receive query data
+'==================================================
+Sub ReceiveLan(strData As String)
+Dim strData2 As String
+strData = ""
+Do
+Winsock1.GetData strData2, vbString
+strData = strData + strData2
+DoEvents
+Loop While (Right(strData, 1) <> vbLf)
+End Sub
