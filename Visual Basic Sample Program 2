@@ -1,0 +1,102 @@
+Const BOARD_ID = 0 'GP-IB Interface card Address
+Const osa = 1 'OSA GP-IB Address
+Private Sub Command1_Click()
+Dim intAddrList(31) As Integer
+Dim intData As Integer
+Dim lngDataSize As Long
+Dim strData As String
+Dim intI As Integer
+Dim byteData() As Byte
+Dim byteSaveData() As Byte
+Dim lngL As Long
+'----- GP-IB Interface setting
+' send IFC
+Call SendIFC(BOARD_ID)
+' assert th REN GPIB line
+intAddrList(0) = NOADDR
+Call EnableRemote(BOARD_ID, intAddrList())
+' GPIB time out setting
+Call ibtmo(BOARD_ID, T30s) 'Time out = 30sec
+'----- send command to OSA
+Call SendGPIB(osa, "CFORM1") ' Command mode set(AQ637X mode)
+Call SendGPIB(osa, ":mmem:stor:grap color,bmp,""test"",int")
+' Save bmp file to internal memory
+Call SendGPIB(osa, ":mmem:data? ""test.bmp"",int")
+' get file data from OSA
+lngDataSize = RecieveBinaryGPIB(osa, byteData())
+' Recieve binary block data
+If byteData(0) <> Asc("#") Then ' check first data
+MsgBox "Data format error"
+Exit Sub
+End If
+'----- calculate data size
+intData = byteData(1) - Asc("0")
+strData = ""
+For intI = 1 To intData
+strData = strData + Chr(byteData(intI + 1))
+Next intI
+lngDataSize = Val(strData) ' data size
+'----- make save data
+ReDim byteSaveData(lngDataSize)
+For lngL = 0 To lngDataSize - 1
+byteSaveData(lngL) = byteData(lngL + intData + 2)
+Next lngL
+'----- save data to file
+Open "c:\test.bmp" For Binary As #1
+Put #1, , byteSaveData
+Close #1
+'----- Disconnect
+Call EnableLocal(BOARD_ID, intAddrList())
+MsgBox "Complete"
+End Sub
+'==================================================
+' Sub routine
+' Send Remote Command
+'==================================================
+Sub SendGPIB(intAddr As Integer, strData As String)
+Call Send(BOARD_ID, intAddr, strData, NLend)
+If (ibsta And EERR) Then
+MsgBox " GP-IB device can't write"
+End If
+End Sub
+'==================================================
+' Sub routine
+' Recieve Binary query data
+'==================================================
+Function RecieveBinaryGPIB(intAdr As Integer, byteArray() As Byte) As
+Long
+Const READSIZE = 1200000 ' MAX 1.2MB
+Dim lngSize As Long
+Dim lngL As Long
+Dim lngPos As Long
+Dim ud As Integer
+Dim byteLow As Byte
+Dim byteHigh As Byte
+Dim strA As String
+Dim intDummy(READSIZE) As Integer
+lngSize = 0
+'----- open device
+ud = ildev(0, intAdr, 0, T30s, 1, 0)
+lngPos = 0
+'----- read data
+Do
+DoEvents
+Call ibrdi(ud, intDummy, READSIZE)
+If (ibsta And EERR) Then
+MsgBox "GP-IB device can't Read(GPIB:" & intAdr & ")"
+RecieveBinaryGPIB = 0
+Exit Function
+Else
+ReDim Preserve byteArray(lngPos + ibcntl + 2)
+For lngL = 0 To ibcntl / 2 - 1
+strA = Right("0000" & Hex(intDummy(lngL)), 4)
+byteHigh = Val("&H" + Left(strA, 2))
+byteLow = Val("&H" + Right(strA, 2))
+byteArray(lngPos) = byteLow
+byteArray(lngPos + 1) = byteHigh
+lngPos = lngPos + 2
+Next lngL
+End If
+Loop While (ibcntl = READSIZE)
+RecieveBinaryGPIB = lngPos
+End Function
